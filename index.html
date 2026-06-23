@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel CGI — Segmentación de Comunas Chile</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Arial,sans-serif;background:#0f1117;color:#e8e8e8;min-height:100vh}
+  
+  header{background:linear-gradient(135deg,#1a1f2e 0%,#12161f 100%);border-bottom:1px solid #2a3040;padding:18px 28px;display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-dot{width:10px;height:10px;border-radius:50%;background:#4a90d9}
+  h1{font-size:17px;font-weight:600;color:#e8e8e8;letter-spacing:.3px}
+  .subtitle{font-size:12px;color:#6b7a99;margin-top:2px}
+  .badge{font-size:11px;padding:4px 10px;border-radius:12px;background:#1e2535;color:#6b7a99;border:1px solid #2a3040}
+
+  .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding:20px 28px 0}
+  .kpi{background:#1a1f2e;border:1px solid #2a3040;border-radius:10px;padding:16px 18px;border-left:3px solid var(--c)}
+  .kpi-label{font-size:11px;color:#6b7a99;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+  .kpi-num{font-size:28px;font-weight:700;color:var(--c)}
+  .kpi-sub{font-size:11px;color:#6b7a99;margin-top:4px}
+
+  .controls{display:flex;align-items:center;gap:10px;padding:16px 28px;flex-wrap:wrap}
+  .controls label{font-size:12px;color:#6b7a99}
+  select,input[type=text]{background:#1a1f2e;border:1px solid #2a3040;color:#e8e8e8;border-radius:7px;padding:7px 12px;font-size:13px;outline:none}
+  select:focus,input:focus{border-color:#4a90d9}
+  .tier-btn{padding:6px 14px;border-radius:20px;border:1px solid #2a3040;background:#1a1f2e;color:#6b7a99;cursor:pointer;font-size:12px;transition:all .15s}
+  .tier-btn.active{border-color:var(--c);color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+  .sep{width:1px;height:22px;background:#2a3040;margin:0 4px}
+
+  .main{display:grid;grid-template-columns:1fr 340px;gap:14px;padding:0 28px 14px}
+  
+  .chart-card{background:#1a1f2e;border:1px solid #2a3040;border-radius:10px;padding:18px}
+  .card-title{font-size:12px;color:#6b7a99;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px}
+  .chart-wrap{position:relative;height:280px}
+
+  .right-col{display:flex;flex-direction:column;gap:14px}
+  .mini-chart{background:#1a1f2e;border:1px solid #2a3040;border-radius:10px;padding:16px}
+  .mini-chart-wrap{position:relative;height:160px}
+
+  .legend-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px}
+  .leg{display:flex;align-items:center;gap:6px;font-size:11px;color:#6b7a99}
+  .leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+
+  .table-section{padding:0 28px 28px}
+  .table-card{background:#1a1f2e;border:1px solid #2a3040;border-radius:10px;overflow:hidden}
+  .table-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #2a3040}
+  .result-count{font-size:12px;color:#6b7a99}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{background:#151820;padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:#6b7a99;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;position:sticky;top:0;z-index:2}
+  thead th.num{text-align:right}
+  tbody tr{border-bottom:1px solid #1e2535;transition:background .1s;cursor:pointer}
+  tbody tr:hover{background:#1e2535}
+  tbody tr.selected{background:#1e2840}
+  tbody td{padding:9px 14px;color:#c8cfe0}
+  tbody td.num{text-align:right;font-variant-numeric:tabular-nums;color:#8a9ab8}
+  .tier-pill{display:inline-block;font-size:10px;padding:2px 9px;border-radius:10px;font-weight:600;white-space:nowrap}
+  .bar-cell{display:flex;align-items:center;gap:8px}
+  .bar-bg{flex:1;height:5px;background:#1e2535;border-radius:3px;min-width:60px}
+  .bar-fill{height:5px;border-radius:3px;transition:width .3s}
+
+  .detail-panel{display:none;background:#12161f;border-top:1px solid #2a3040;padding:18px 28px}
+  .detail-panel.open{display:block}
+  .detail-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-top:12px}
+  .detail-item{background:#1a1f2e;border:1px solid #2a3040;border-radius:8px;padding:12px}
+  .detail-item-label{font-size:10px;color:#6b7a99;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+  .detail-item-val{font-size:16px;font-weight:600;color:#e8e8e8}
+  .detail-item-unit{font-size:10px;color:#6b7a99;margin-top:1px}
+
+  .scroll-table{max-height:460px;overflow-y:auto}
+  
+  ::-webkit-scrollbar{width:5px;height:5px}
+  ::-webkit-scrollbar-track{background:#12161f}
+  ::-webkit-scrollbar-thumb{background:#2a3040;border-radius:3px}
+
+  /* ── GLOSARIO ── */
+  .glosario-section{padding:0 28px 40px}
+  .glosario-toggle{display:flex;align-items:center;gap:10px;cursor:pointer;padding:14px 18px;background:#1a1f2e;border:1px solid #2a3040;border-radius:10px;margin-bottom:0;user-select:none;transition:background .15s}
+  .glosario-toggle:hover{background:#1e2535}
+  .glosario-toggle-label{font-size:12px;font-weight:600;color:#6b7a99;text-transform:uppercase;letter-spacing:.5px;flex:1}
+  .glosario-toggle-icon{font-size:14px;color:#6b7a99;transition:transform .2s}
+  .glosario-toggle-icon.open{transform:rotate(180deg)}
+  .glosario-body{display:none;background:#1a1f2e;border:1px solid #2a3040;border-top:none;border-radius:0 0 10px 10px;padding:24px 24px 28px}
+  .glosario-body.open{display:block}
+  
+  .glosario-grid{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+  .glosario-col-title{font-size:11px;font-weight:700;color:#4a90d9;text-transform:uppercase;letter-spacing:.6px;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid #2a3040}
+
+  .tier-def{display:flex;gap:14px;margin-bottom:16px;align-items:flex-start}
+  .tier-def-badge{flex-shrink:0;padding:4px 12px;border-radius:12px;font-size:11px;font-weight:700;white-space:nowrap;margin-top:2px}
+  .tier-def-body{}
+  .tier-def-name{font-size:13px;font-weight:600;color:#c8cfe0;margin-bottom:4px}
+  .tier-def-desc{font-size:12px;color:#6b7a99;line-height:1.6}
+  .tier-def-pilar{font-size:11px;color:#4a90d9;margin-top:4px}
+
+  .var-table{width:100%;border-collapse:collapse;font-size:12px}
+  .var-table th{text-align:left;padding:7px 10px;font-size:10px;font-weight:600;color:#6b7a99;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #2a3040;background:#151820}
+  .var-table td{padding:7px 10px;border-bottom:1px solid #1e2535;vertical-align:top;color:#c8cfe0;line-height:1.5}
+  .var-table td:first-child{color:#e8e8e8;font-weight:500;white-space:nowrap}
+  .var-table td.tag{color:#27ae7a;font-size:10px;white-space:nowrap}
+  .var-table tr:last-child td{border-bottom:none}
+
+  .idx-card{background:#151820;border-radius:8px;padding:14px 16px;margin-bottom:10px}
+  .idx-card-header{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .idx-card-name{font-size:13px;font-weight:600;color:#e8e8e8}
+  .idx-card-weight{font-size:11px;color:#ba7517;background:#2a1f00;padding:2px 8px;border-radius:8px}
+  .idx-card-desc{font-size:12px;color:#6b7a99;line-height:1.6;margin-bottom:8px}
+  .idx-card-vars{display:flex;flex-wrap:wrap;gap:6px}
+  .idx-var-chip{font-size:10px;padding:2px 8px;border-radius:6px;background:#1e2535;color:#8a9ab8;border:1px solid #2a3040}
+
+  .fuentes-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:8px}
+  .fuente-item{background:#151820;border-radius:8px;padding:12px;text-align:center}
+  .fuente-sigla{font-size:14px;font-weight:700;color:#4a90d9;margin-bottom:4px}
+  .fuente-name{font-size:10px;color:#6b7a99;line-height:1.4}
+
+  .metodologia-note{background:#151820;border-radius:8px;padding:14px 16px;margin-top:16px;font-size:12px;color:#6b7a99;line-height:1.7;border-left:3px solid #4a90d9}
+  .metodologia-note strong{color:#c8cfe0}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    <div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <h1>Centro de Gobierno Inteligente</h1>
+        <span class="badge">v1.0 · Junio 2026</span>
+      </div>
+      <div class="subtitle">Panel de segmentación · 349 comunas de Chile · Índice CGI compuesto</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#6b7a99;text-align:right">Fuentes: CASEN · SII · SINIM · CPLT · CEAD<br>Modelo: K-Means 4 clusters · 14 variables</div>
+</header>
+
+<div class="kpi-row">
+  <div class="kpi" style="--c:#4a90d9">
+    <div class="kpi-label">Tier 1 · Urbano Premium</div>
+    <div class="kpi-num" id="k1">28</div>
+    <div class="kpi-sub">Score medio: 67.4 · Alta densidad + seguridad</div>
+  </div>
+  <div class="kpi" style="--c:#27ae7a">
+    <div class="kpi-label">Tier 2 · Brecha Recaudación</div>
+    <div class="kpi-num" id="k2">166</div>
+    <div class="kpi-sub">Score medio: 59.7 · Alta dependencia FCM</div>
+  </div>
+  <div class="kpi" style="--c:#e24b4a">
+    <div class="kpi-label">Tier 3 · Desarrollo Medio</div>
+    <div class="kpi-num" id="k3">63</div>
+    <div class="kpi-sub">Score medio: 36.2 · Baja brecha, alta capacidad</div>
+  </div>
+  <div class="kpi" style="--c:#ba7517">
+    <div class="kpi-label">Tier 4 · Rural / SaaS</div>
+    <div class="kpi-num" id="k4">92</div>
+    <div class="kpi-sub">Score medio: 50.1 · Brecha enorme, baja adopción</div>
+  </div>
+</div>
+
+<div class="controls">
+  <label>Tier</label>
+  <button class="tier-btn active" style="--c:#a0aec0" data-tier="ALL" onclick="setTier('ALL',this)">Todos</button>
+  <button class="tier-btn" style="--c:#4a90d9" data-tier="T1" onclick="setTier('T1',this)">Tier 1</button>
+  <button class="tier-btn" style="--c:#27ae7a" data-tier="T2" onclick="setTier('T2',this)">Tier 2</button>
+  <button class="tier-btn" style="--c:#e24b4a" data-tier="T3" onclick="setTier('T3',this)">Tier 3</button>
+  <button class="tier-btn" style="--c:#ba7517" data-tier="T4" onclick="setTier('T4',this)">Tier 4</button>
+  <div class="sep"></div>
+  <label>Región</label>
+  <select id="regSel" onchange="render()"><option value="">Todas</option></select>
+  <div class="sep"></div>
+  <input type="text" id="search" placeholder="Buscar comuna..." oninput="render()" style="width:180px">
+  <div class="sep"></div>
+  <label>Ordenar por</label>
+  <select id="sortSel" onchange="render()">
+    <option value="idx_cgi">Score CGI ↓</option>
+    <option value="idx_recaudacion">Recaudación ↓</option>
+    <option value="idx_seguridad">Seguridad ↓</option>
+    <option value="idx_adopcion">Adopción ↓</option>
+    <option value="population_total">Población ↓</option>
+  </select>
+  <span id="res-count" style="font-size:12px;color:#6b7a99;margin-left:auto"></span>
+</div>
+
+<div class="main">
+  <div class="chart-card">
+    <div class="card-title">Recaudación vs Seguridad — posición por comuna</div>
+    <div class="chart-wrap"><canvas id="scatter"></canvas></div>
+    <div class="legend-row" style="margin-top:12px">
+      <div class="leg"><div class="leg-dot" style="background:#4a90d9"></div>Tier 1 · Urbano Premium</div>
+      <div class="leg"><div class="leg-dot" style="background:#27ae7a"></div>Tier 2 · Brecha Recaudación</div>
+      <div class="leg"><div class="leg-dot" style="background:#e24b4a"></div>Tier 3 · Desarrollo Medio</div>
+      <div class="leg"><div class="leg-dot" style="background:#ba7517"></div>Tier 4 · Rural / SaaS</div>
+    </div>
+  </div>
+  <div class="right-col">
+    <div class="mini-chart">
+      <div class="card-title">Distribución score CGI por tier</div>
+      <div class="mini-chart-wrap"><canvas id="barChart"></canvas></div>
+    </div>
+    <div class="mini-chart">
+      <div class="card-title">% rural por tier</div>
+      <div class="mini-chart-wrap"><canvas id="ruralChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="table-section">
+  <div class="table-card">
+    <div class="table-header">
+      <div class="card-title" style="margin:0">Comunas clasificadas</div>
+      <div class="result-count" id="tbl-count"></div>
+    </div>
+    <div class="scroll-table">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Comuna</th>
+            <th>Región</th>
+            <th>Tier</th>
+            <th class="num">Score CGI</th>
+            <th class="num">Recaudación</th>
+            <th class="num">Seguridad</th>
+            <th class="num">Adopción</th>
+            <th class="num">Población</th>
+            <th class="num">% Rural</th>
+            <th class="num">FCM %</th>
+            <th class="num">Pobreza %</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="detail-panel" id="detail-panel">
+    <div style="font-size:13px;font-weight:600;color:#e8e8e8" id="detail-title"></div>
+    <div class="detail-grid" id="detail-grid"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ GLOSARIO ═══════════════ -->
+<div class="glosario-section">
+  <div class="glosario-toggle" onclick="toggleGlosario()">
+    <span class="glosario-toggle-label">📖 Glosario — Definiciones, índices y fuentes de datos</span>
+    <span class="glosario-toggle-icon" id="glosario-icon">▼</span>
+  </div>
+  <div class="glosario-body" id="glosario-body">
+    <div class="glosario-grid">
+
+      <!-- COLUMNA IZQUIERDA -->
+      <div>
+        <div class="glosario-col-title">Definición de Tiers</div>
+
+        <div class="tier-def">
+          <div class="tier-def-badge" style="background:#4a90d922;color:#4a90d9;border:1px solid #4a90d955">Tier 1</div>
+          <div class="tier-def-body">
+            <div class="tier-def-name">Urbano Premium</div>
+            <div class="tier-def-desc">Comunas densamente pobladas con alta tasa de delitos por habitante y capacidad institucional relativamente sólida. Presentan oportunidad alta en los tres pilares CGI (Recaudación + Seguridad + Eficiencia). Concentradas principalmente en la Región Metropolitana.</div>
+            <div class="tier-def-pilar">→ Pilar prioritario: Seguridad Territorial + Recaudación Inteligente</div>
+          </div>
+        </div>
+
+        <div class="tier-def">
+          <div class="tier-def-badge" style="background:#27ae7a22;color:#27ae7a;border:1px solid #27ae7a55">Tier 2</div>
+          <div class="tier-def-body">
+            <div class="tier-def-name">Brecha Recaudación</div>
+            <div class="tier-def-desc">El segmento más grande (166 comunas). Alta dependencia del FCM, bajos ingresos propios y capacidad de adopción moderada. Distribuidas en todo Chile, con fuerte presencia en regiones del sur. La brecha de recaudación propia es su rasgo definitorio.</div>
+            <div class="tier-def-pilar">→ Pilar prioritario: Recaudación Inteligente + Rendiciones</div>
+          </div>
+        </div>
+
+        <div class="tier-def">
+          <div class="tier-def-badge" style="background:#e24b4a22;color:#e24b4a;border:1px solid #e24b4a55">Tier 3</div>
+          <div class="tier-def-body">
+            <div class="tier-def-name">Desarrollo Medio</div>
+            <div class="tier-def-desc">Comunas con ingresos propios relativamente altos (baja dependencia FCM) pero con brecha de modernización. Incluye comunas ricas como Las Condes o Vitacura — que puntúan bajo en CGI precisamente porque su recaudación ya es alta y su brecha es menor.</div>
+            <div class="tier-def-pilar">→ Pilar prioritario: Eficiencia Interna + Transparencia</div>
+          </div>
+        </div>
+
+        <div class="tier-def">
+          <div class="tier-def-badge" style="background:#ba751722;color:#ba7517;border:1px solid #ba751755">Tier 4</div>
+          <div class="tier-def-body">
+            <div class="tier-def-name">Rural / SaaS</div>
+            <div class="tier-def-desc">Comunas con brecha de recaudación extrema (FCM muy alto) pero baja capacidad de adopción institucional. Mayoritariamente rurales o semirurales. Son el mercado objetivo para una versión SaaS liviana del CGI, con implementación asistida y bajo costo inicial.</div>
+            <div class="tier-def-pilar">→ Producto: CGI SaaS · Entrada por Recaudación Básica</div>
+          </div>
+        </div>
+
+        <div class="glosario-col-title" style="margin-top:24px">Índices CGI — Composición</div>
+
+        <div class="idx-card">
+          <div class="idx-card-header">
+            <div class="idx-card-name">Índice de Recaudación</div>
+            <div class="idx-card-weight">Peso: 40%</div>
+          </div>
+          <div class="idx-card-desc">Mide la brecha entre la recaudación propia actual del municipio y su potencial. A mayor dependencia del FCM y menor ingreso propio, mayor oportunidad para el pilar de Recaudación Inteligente del CGI.</div>
+          <div class="idx-card-vars">
+            <span class="idx-var-chip">Dependencia FCM (30%)</span>
+            <span class="idx-var-chip">Tasa de Pobreza (20%)</span>
+            <span class="idx-var-chip">Ingreso mediano ↓ (15%)</span>
+            <span class="idx-var-chip">N° Empresas (20%)</span>
+            <span class="idx-var-chip">Ingresos propios ↓ (15%)</span>
+          </div>
+        </div>
+
+        <div class="idx-card">
+          <div class="idx-card-header">
+            <div class="idx-card-name">Índice de Seguridad</div>
+            <div class="idx-card-weight">Peso: 30%</div>
+          </div>
+          <div class="idx-card-desc">Mide la presión territorial que justifica inversión en el pilar de Seguridad Territorial. Combina la tasa de delitos con la densidad y tamaño de la comuna.</div>
+          <div class="idx-card-vars">
+            <span class="idx-var-chip">Tasa delitos /100k (50%)</span>
+            <span class="idx-var-chip">Densidad poblacional (30%)</span>
+            <span class="idx-var-chip">Población total (20%)</span>
+          </div>
+        </div>
+
+        <div class="idx-card">
+          <div class="idx-card-header">
+            <div class="idx-card-name">Índice de Adopción</div>
+            <div class="idx-card-weight">Peso: 30%</div>
+          </div>
+          <div class="idx-card-desc">Proxy de la capacidad institucional para adoptar tecnología. Municipios con mejor transparencia, mayor ingreso per cápita y mayor proporción de mujeres en planta tienen históricamente mejores tasas de adopción digital.</div>
+          <div class="idx-card-vars">
+            <span class="idx-var-chip">Puntaje CPLT (40%)</span>
+            <span class="idx-var-chip">Ing. munic. per cápita (35%)</span>
+            <span class="idx-var-chip">Funcionarias mujeres (25%)</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- COLUMNA DERECHA -->
+      <div>
+        <div class="glosario-col-title">Variables — Diccionario de datos</div>
+
+        <table class="var-table">
+          <thead>
+            <tr><th>Variable</th><th>Descripción</th><th>Fuente</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Score CGI</td><td>Índice compuesto 0–100. Combinación ponderada de Recaudación (40%), Seguridad (30%) y Adopción (30%). Mayor score = mayor oportunidad de negocio para el CGI.</td><td class="tag">Modelo</td></tr>
+            <tr><td>Dependencia FCM %</td><td>Porcentaje del presupuesto municipal financiado por el Fondo Común Municipal. A mayor dependencia, menor recaudación propia y mayor brecha de oportunidad.</td><td class="tag">SINIM</td></tr>
+            <tr><td>Ingresos Propios (M$)</td><td>Ingresos Propios Permanentes del municipio en miles de pesos. Incluye patentes, permisos de circulación, multas y derechos municipales.</td><td class="tag">SINIM</td></tr>
+            <tr><td>Ejecución Presup. %</td><td>Porcentaje del presupuesto aprobado efectivamente ejecutado. Alta ejecución indica capacidad de gestión; muy alta (>100%) puede indicar sobreejercicio.</td><td class="tag">SINIM</td></tr>
+            <tr><td>Ingreso Mediano (CLP)</td><td>Mediana del ingreso imponible de asalariados de la comuna. Proxy del nivel socioeconómico y del potencial de recaudación de contribuciones.</td><td class="tag">SII</td></tr>
+            <tr><td>Pobreza %</td><td>Tasa de pobreza por ingresos según CASEN. Comunas con alta pobreza tienen mayor brecha de recaudación pero también mayor resistencia a cobros municipales.</td><td class="tag">CASEN</td></tr>
+            <tr><td>N° Empresas</td><td>Número de empresas con domicilio en la comuna según SII. Indica el potencial de recaudación por patentes comerciales e industriales.</td><td class="tag">SII</td></tr>
+            <tr><td>Delitos /100k hab</td><td>Tasa de denuncias por delitos de mayor connotación social por cada 100.000 habitantes. Proxy de la presión sobre seguridad pública territorial.</td><td class="tag">CEAD</td></tr>
+            <tr><td>CPLT %</td><td>Puntaje de transparencia activa evaluado por el Consejo para la Transparencia (0–100). Mide el cumplimiento de obligaciones de información pública. Proxy de digitalización institucional.</td><td class="tag">CPLT</td></tr>
+            <tr><td>Ing. Municipal p/c</td><td>Ingreso municipal per cápita en pesos. Indica la capacidad financiera del municipio por habitante. Comunas con muy alta o muy baja cifra tienen patrones distintos de adopción.</td><td class="tag">SINIM</td></tr>
+            <tr><td>Funcionarias Mujeres %</td><td>Porcentaje de la planta municipal correspondiente a mujeres. Estudios municipales chilenos (SUBDERE 2023) muestran correlación positiva entre feminización de la planta y adopción de tecnología.</td><td class="tag">SINIM</td></tr>
+            <tr><td>% Rural</td><td>Porcentaje de la población comunal clasificada como rural según SINIM. Determina el tipo de producto CGI recomendado: urbano completo vs. SaaS liviano.</td><td class="tag">SINIM</td></tr>
+            <tr><td>Cobertura FONASA %</td><td>Porcentaje de la población inscrita en FONASA (sistema público de salud). Proxy de la cobertura de servicios públicos y vínculo ciudadano–municipio.</td><td class="tag">FONASA</td></tr>
+            <tr><td>FCM %</td><td>Ver Dependencia FCM % (versión abreviada en tabla).</td><td class="tag">SINIM</td></tr>
+          </tbody>
+        </table>
+
+        <div class="glosario-col-title" style="margin-top:24px">Fuentes de datos</div>
+        <div class="fuentes-grid">
+          <div class="fuente-item"><div class="fuente-sigla">SINIM</div><div class="fuente-name">Sistema Nacional de Información Municipal · SUBDERE · Datos 2023</div></div>
+          <div class="fuente-item"><div class="fuente-sigla">CASEN</div><div class="fuente-name">Encuesta de Caracterización Socioeconómica · MIDESO · Datos 2022</div></div>
+          <div class="fuente-item"><div class="fuente-sigla">SII</div><div class="fuente-name">Servicio de Impuestos Internos · Estadísticas de empresas y renta · Datos 2023</div></div>
+          <div class="fuente-item"><div class="fuente-sigla">CPLT</div><div class="fuente-name">Consejo para la Transparencia · Evaluación transparencia activa · Datos 2022</div></div>
+          <div class="fuente-item"><div class="fuente-sigla">CEAD</div><div class="fuente-name">Centro de Estudios y Análisis del Delito · Carabineros · Datos 2023</div></div>
+        </div>
+
+        <div class="metodologia-note">
+          <strong>Metodología del modelo:</strong> Segmentación realizada con K-Means (k=4, n_init=20, random_state=42) sobre 3 sub-índices normalizados (0–100) mediante MinMaxScaler, con imputación de medianas para valores faltantes. El número de clusters fue seleccionado por coherencia interpretativa con los pilares del producto CGI. Las ponderaciones de las variables dentro de cada sub-índice reflejan el juicio experto sobre su relevancia comercial, no únicamente varianza estadística.<br><br>
+          <strong>Interpretación del Score CGI:</strong> Un score alto indica <em>mayor oportunidad de mercado</em> para el CGI, no mayor desarrollo municipal. Comunas como Las Condes o Vitacura puntúan bajo porque su brecha ya está cubierta; comunas como Puente Alto o Lo Espejo puntúan alto porque la brecha es grande y la capacidad de pago existe.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleGlosario(){
+  const body=document.getElementById('glosario-body');
+  const icon=document.getElementById('glosario-icon');
+  body.classList.toggle('open');
+  icon.classList.toggle('open');
+}
+</script>
+
+<script>
+const TC = {T1:'#4a90d9',T2:'#27ae7a',T3:'#e24b4a',T4:'#ba7517'};
+const TL = {T1:'Tier 1',T2:'Tier 2',T3:'Tier 3',T4:'Tier 4'};
+const DATA = JSON.parse(`[{"CUT":13201,"Nombre":"Puente Alto","Región":"Metropolitana de Santiago","Provincia":"Cordillera","population_total":568000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":74.8,"Ingresos Propios Permanentes":27713627.0,"Ejecución Presupuestaria Municipal":80.0,"Mediana Ingreso Imponible Asalariados":864412.0,"Tasa de Pobreza":5.0,"Numero de Empresas":19208.0,"Tasa de Delitos por 100.000 hab.":4693.7,"Puntaje Transparencia Activa (CPLT)":84.8,"Ingreso Municipal per Cápita":48792.0,"Funcionarias Municipales Mujeres":54.6,"Cobertura FONASA":76.3,"idx_recaudacion":69.6,"idx_seguridad":62.9,"idx_adopcion":63.6,"idx_cgi":100.0,"Tier":"T1"},{"CUT":13116,"Nombre":"Lo Espejo","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":103000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":80.6,"Ingresos Propios Permanentes":4644602.0,"Ejecución Presupuestaria Municipal":84.0,"Mediana Ingreso Imponible Asalariados":722847.0,"Tasa de Pobreza":6.8,"Numero de Empresas":3018.0,"Tasa de Delitos por 100.000 hab.":5179.6,"Puntaje Transparencia Activa (CPLT)":88.4,"Ingreso Municipal per Cápita":45093.0,"Funcionarias Municipales Mujeres":54.0,"Cobertura FONASA":93.6,"idx_recaudacion":70.3,"idx_seguridad":55.1,"idx_adopcion":65.6,"idx_cgi":97.6,"Tier":"T1"},{"CUT":13101,"Nombre":"Santiago","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":404000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":8.7,"Ingresos Propios Permanentes":121227495.0,"Ejecución Presupuestaria Municipal":91.2,"Mediana Ingreso Imponible Asalariados":948020.0,"Tasa de Pobreza":3.9,"Numero de Empresas":59724.0,"Tasa de Delitos por 100.000 hab.":11887.4,"Puntaje Transparencia Activa (CPLT)":96.7,"Ingreso Municipal per Cápita":300068.0,"Funcionarias Municipales Mujeres":39.2,"Cobertura FONASA":85.4,"idx_recaudacion":45.6,"idx_seguridad":94.4,"idx_adopcion":62.9,"idx_cgi":94.0,"Tier":"T1"},{"CUT":13103,"Nombre":"Cerro Navia","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":148000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":87.2,"Ingresos Propios Permanentes":3122725.0,"Ejecución Presupuestaria Municipal":96.2,"Mediana Ingreso Imponible Asalariados":708592.0,"Tasa de Pobreza":6.0,"Numero de Empresas":4098.0,"Tasa de Delitos por 100.000 hab.":4783.1,"Puntaje Transparencia Activa (CPLT)":85.5,"Ingreso Municipal per Cápita":21099.0,"Funcionarias Municipales Mujeres":45.8,"Cobertura FONASA":85.7,"idx_recaudacion":73.4,"idx_seguridad":54.1,"idx_adopcion":56.0,"idx_cgi":92.6,"Tier":"T1"},{"CUT":13402,"Nombre":"Alhue","Región":"Metropolitana de Santiago","Provincia":"Melipilla","population_total":6000.0,"sinim_rural_pct":13.8,"Dependencia del FCM":30.1,"Ingresos Propios Permanentes":12408511.0,"Ejecución Presupuestaria Municipal":87.0,"Mediana Ingreso Imponible Asalariados":894537.0,"Tasa de Pobreza":4.4,"Numero de Empresas":320.0,"Tasa de Delitos por 100.000 hab.":93316.7,"Puntaje Transparencia Activa (CPLT)":56.1,"Ingreso Municipal per Cápita":2068085.0,"Funcionarias Municipales Mujeres":42.1,"Cobertura FONASA":100.0,"idx_recaudacion":38.4,"idx_seguridad":100.0,"idx_adopcion":64.9,"idx_cgi":91.6,"Tier":"T1"},{"CUT":13117,"Nombre":"Lo Prado","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":96000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":81.3,"Ingresos Propios Permanentes":3559068.0,"Ejecución Presupuestaria Municipal":93.7,"Mediana Ingreso Imponible Asalariados":734080.0,"Tasa de Pobreza":5.3,"Numero de Empresas":3251.0,"Tasa de Delitos por 100.000 hab.":6601.0,"Puntaje Transparencia Activa (CPLT)":81.9,"Ingreso Municipal per Cápita":37074.0,"Funcionarias Municipales Mujeres":46.2,"Cobertura FONASA":100.0,"idx_recaudacion":68.8,"idx_seguridad":53.2,"idx_adopcion":54.1,"idx_cgi":85.9,"Tier":"T1"},{"CUT":13105,"Nombre":"El Bosque","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":175000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":77.6,"Ingresos Propios Permanentes":6987824.0,"Ejecución Presupuestaria Municipal":77.3,"Mediana Ingreso Imponible Asalariados":741740.0,"Tasa de Pobreza":6.2,"Numero de Empresas":5601.0,"Tasa de Delitos por 100.000 hab.":4732.0,"Puntaje Transparencia Activa (CPLT)":65.0,"Ingreso Municipal per Cápita":39930.0,"Funcionarias Municipales Mujeres":50.8,"Cobertura FONASA":100.0,"idx_recaudacion":69.0,"idx_seguridad":53.1,"idx_adopcion":45.9,"idx_cgi":79.5,"Tier":"T1"},{"CUT":13111,"Nombre":"La Granja","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":116000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":77.8,"Ingresos Propios Permanentes":5067625.0,"Ejecución Presupuestaria Municipal":76.8,"Mediana Ingreso Imponible Asalariados":741810.0,"Tasa de Pobreza":6.0,"Numero de Empresas":4080.0,"Tasa de Delitos por 100.000 hab.":5933.6,"Puntaje Transparencia Activa (CPLT)":68.5,"Ingreso Municipal per Cápita":43686.0,"Funcionarias Municipales Mujeres":52.9,"Cobertura FONASA":100.0,"idx_recaudacion":68.2,"idx_seguridad":47.6,"idx_adopcion":50.3,"idx_cgi":78.9,"Tier":"T1"},{"CUT":8301,"Nombre":"Lebu","Región":"Biobio","Provincia":"Arauco","population_total":27000.0,"sinim_rural_pct":24.6,"Dependencia del FCM":52.9,"Ingresos Propios Permanentes":21683941.0,"Ejecución Presupuestaria Municipal":70.3,"Mediana Ingreso Imponible Asalariados":797052.0,"Tasa de Pobreza":8.4,"Numero de Empresas":1047.0,"Tasa de Delitos por 100.000 hab.":51577.8,"Puntaje Transparencia Activa (CPLT)":76.8,"Ingreso Municipal per Cápita":803109.0,"Funcionarias Municipales Mujeres":42.8,"Cobertura FONASA":100.0,"idx_recaudacion":55.3,"idx_seguridad":56.3,"idx_adopcion":59.8,"idx_cgi":78.6,"Tier":"T1"},{"CUT":13131,"Nombre":"San Ramon","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":86000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":75.9,"Ingresos Propios Permanentes":4061435.0,"Ejecución Presupuestaria Municipal":90.7,"Mediana Ingreso Imponible Asalariados":718338.5,"Tasa de Pobreza":6.9,"Numero de Empresas":3082.0,"Tasa de Delitos por 100.000 hab.":5983.7,"Puntaje Transparencia Activa (CPLT)":73.3,"Ingreso Municipal per Cápita":47226.0,"Funcionarias Municipales Mujeres":47.7,"Cobertura FONASA":95.3,"idx_recaudacion":68.3,"idx_seguridad":47.6,"idx_adopcion":49.3,"idx_cgi":78.2,"Tier":"T1"},{"CUT":13121,"Nombre":"Pedro Aguirre Cerda","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":102000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":69.2,"Ingresos Propios Permanentes":5917535.0,"Ejecución Presupuestaria Municipal":80.0,"Mediana Ingreso Imponible Asalariados":755900.0,"Tasa de Pobreza":5.5,"Numero de Empresas":1092.0,"Tasa de Delitos por 100.000 hab.":5438.2,"Puntaje Transparencia Activa (CPLT)":94.9,"Ingreso Municipal per Cápita":58015.0,"Funcionarias Municipales Mujeres":44.2,"Cobertura FONASA":100.0,"idx_recaudacion":61.5,"idx_seguridad":41.9,"idx_adopcion":62.0,"idx_cgi":77.9,"Tier":"T1"},{"CUT":13119,"Nombre":"Maipu","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":521000.0,"sinim_rural_pct":0.6,"Dependencia del FCM":62.9,"Ingresos Propios Permanentes":39910211.0,"Ejecución Presupuestaria Municipal":89.8,"Mediana Ingreso Imponible Asalariados":948380.0,"Tasa de Pobreza":3.2,"Numero de Empresas":20279.0,"Tasa de Delitos por 100.000 hab.":4571.4,"Puntaje Transparencia Activa (CPLT)":93.1,"Ingreso Municipal per Cápita":76603.0,"Funcionarias Municipales Mujeres":33.0,"Cobertura FONASA":68.0,"idx_recaudacion":59.7,"idx_seguridad":51.9,"idx_adopcion":51.5,"idx_cgi":73.8,"Tier":"T1"},{"CUT":13104,"Nombre":"Conchali","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":133000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":56.8,"Ingresos Propios Permanentes":10270467.0,"Ejecución Presupuestaria Municipal":92.3,"Mediana Ingreso Imponible Asalariados":763380.0,"Tasa de Pobreza":6.1,"Numero de Empresas":5409.0,"Tasa de Delitos por 100.000 hab.":5469.9,"Puntaje Transparencia Activa (CPLT)":76.0,"Ingreso Municipal per Cápita":77222.0,"Funcionarias Municipales Mujeres":46.1,"Cobertura FONASA":92.9,"idx_recaudacion":57.9,"idx_seguridad":49.8,"idx_adopcion":50.4,"idx_cgi":69.9,"Tier":"T1"},{"CUT":13110,"Nombre":"La Florida","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":366000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":45.6,"Ingresos Propios Permanentes":45178342.0,"Ejecución Presupuestaria Municipal":87.2,"Mediana Ingreso Imponible Asalariados":956895.0,"Tasa de Pobreza":3.5,"Numero de Empresas":16082.0,"Tasa de Delitos por 100.000 hab.":5304.6,"Puntaje Transparencia Activa (CPLT)":90.2,"Ingreso Municipal per Cápita":123438.0,"Funcionarias Municipales Mujeres":49.2,"Cobertura FONASA":96.4,"idx_recaudacion":48.7,"idx_seguridad":45.5,"idx_adopcion":64.1,"idx_cgi":68.7,"Tier":"T1"},{"CUT":13108,"Nombre":"Independencia","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":142000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":43.2,"Ingresos Propios Permanentes":12966429.0,"Ejecución Presupuestaria Municipal":94.3,"Mediana Ingreso Imponible Asalariados":766060.0,"Tasa de Pobreza":5.8,"Numero de Empresas":4923.0,"Tasa de Delitos por 100.000 hab.":6391.5,"Puntaje Transparencia Activa (CPLT)":56.4,"Ingreso Municipal per Cápita":91313.0,"Funcionarias Municipales Mujeres":44.3,"Cobertura FONASA":77.7,"idx_recaudacion":50.4,"idx_seguridad":75.7,"idx_adopcion":34.9,"idx_cgi":65.6,"Tier":"T1"},{"CUT":13109,"Nombre":"La Cisterna","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":100000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":36.3,"Ingresos Propios Permanentes":11642246.0,"Ejecución Presupuestaria Municipal":76.1,"Mediana Ingreso Imponible Asalariados":890396.0,"Tasa de Pobreza":4.1,"Numero de Empresas":5992.0,"Tasa de Delitos por 100.000 hab.":7930.0,"Puntaje Transparencia Activa (CPLT)":94.3,"Ingreso Municipal per Cápita":116422.0,"Funcionarias Municipales Mujeres":46.3,"Cobertura FONASA":80.5,"idx_recaudacion":44.1,"idx_seguridad":43.9,"idx_adopcion":64.4,"idx_cgi":63.3,"Tier":"T1"},{"CUT":8112,"Nombre":"Santa Juana","Región":"Biobio","Provincia":"Concepcion","population_total":14000.0,"sinim_rural_pct":0.8,"Dependencia del FCM":49.3,"Ingresos Propios Permanentes":10734080.0,"Ejecución Presupuestaria Municipal":86.8,"Mediana Ingreso Imponible Asalariados":851420.0,"Tasa de Pobreza":3.2,"Numero de Empresas":458.0,"Tasa de Delitos por 100.000 hab.":35500.0,"Puntaje Transparencia Activa (CPLT)":85.1,"Ingreso Municipal per Cápita":766720.0,"Funcionarias Municipales Mujeres":37.0,"Cobertura FONASA":100.0,"idx_recaudacion":46.9,"idx_seguridad":38.8,"idx_adopcion":60.3,"idx_cgi":59.8,"Tier":"T1"},{"CUT":13127,"Nombre":"Recoleta","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":190000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":22.4,"Ingresos Propios Permanentes":27770611.0,"Ejecución Presupuestaria Municipal":83.4,"Mediana Ingreso Imponible Asalariados":750873.0,"Tasa de Pobreza":5.1,"Numero de Empresas":12011.0,"Tasa de Delitos por 100.000 hab.":7000.0,"Puntaje Transparencia Activa (CPLT)":84.0,"Ingreso Municipal per Cápita":146161.0,"Funcionarias Municipales Mujeres":43.5,"Cobertura FONASA":76.8,"idx_recaudacion":41.4,"idx_seguridad":54.8,"idx_adopcion":55.0,"idx_cgi":59.8,"Tier":"T1"},{"CUT":13404,"Nombre":"Maria Pinto","Región":"Metropolitana de Santiago","Provincia":"Melipilla","population_total":13000.0,"sinim_rural_pct":35.0,"Dependencia del FCM":32.9,"Ingresos Propios Permanentes":10707447.0,"Ejecución Presupuestaria Municipal":90.9,"Mediana Ingreso Imponible Asalariados":731970.0,"Tasa de Pobreza":5.9,"Numero de Empresas":726.0,"Tasa de Delitos por 100.000 hab.":34069.2,"Puntaje Transparencia Activa (CPLT)":78.7,"Ingreso Municipal per Cápita":823650.0,"Funcionarias Municipales Mujeres":46.0,"Cobertura FONASA":100.0,"idx_recaudacion":43.8,"idx_seguridad":36.4,"idx_adopcion":64.4,"idx_cgi":58.5,"Tier":"T1"},{"CUT":13126,"Nombre":"Quinta Normal","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":110000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":47.2,"Ingresos Propios Permanentes":12033316.0,"Ejecución Presupuestaria Municipal":82.2,"Mediana Ingreso Imponible Asalariados":787743.0,"Tasa de Pobreza":2.2,"Numero de Empresas":7096.0,"Tasa de Delitos por 100.000 hab.":8561.8,"Puntaje Transparencia Activa (CPLT)":73.7,"Ingreso Municipal per Cápita":109394.0,"Funcionarias Municipales Mujeres":49.8,"Cobertura FONASA":100.0,"idx_recaudacion":48.4,"idx_seguridad":42.8,"idx_adopcion":52.5,"idx_cgi":57.6,"Tier":"T1"},{"CUT":13129,"Nombre":"San Joaquin","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":94000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":25.5,"Ingresos Propios Permanentes":17429671.0,"Ejecución Presupuestaria Municipal":91.2,"Mediana Ingreso Imponible Asalariados":796663.0,"Tasa de Pobreza":4.8,"Numero de Empresas":4964.0,"Tasa de Delitos por 100.000 hab.":6772.3,"Puntaje Transparencia Activa (CPLT)":91.0,"Ingreso Municipal per Cápita":185422.0,"Funcionarias Municipales Mujeres":48.1,"Cobertura FONASA":100.0,"idx_recaudacion":39.6,"idx_seguridad":40.4,"idx_adopcion":64.6,"idx_cgi":56.8,"Tier":"T1"},{"CUT":13106,"Nombre":"Estacion Central","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":147000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":32.5,"Ingresos Propios Permanentes":22138973.0,"Ejecución Presupuestaria Municipal":85.4,"Mediana Ingreso Imponible Asalariados":776380.5,"Tasa de Pobreza":5.0,"Numero de Empresas":1092.0,"Tasa de Delitos por 100.000 hab.":10353.7,"Puntaje Transparencia Activa (CPLT)":74.2,"Ingreso Municipal per Cápita":150605.0,"Funcionarias Municipales Mujeres":47.5,"Cobertura FONASA":85.3,"idx_recaudacion":40.9,"idx_seguridad":51.3,"idx_adopcion":51.5,"idx_cgi":54.3,"Tier":"T1"},{"CUT":13128,"Nombre":"Renca","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":160000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":29.4,"Ingresos Propios Permanentes":24034748.0,"Ejecución Presupuestaria Municipal":84.3,"Mediana Ingreso Imponible Asalariados":766400.0,"Tasa de Pobreza":5.3,"Numero de Empresas":5172.0,"Tasa de Delitos por 100.000 hab.":4814.4,"Puntaje Transparencia Activa (CPLT)":65.3,"Ingreso Municipal per Cápita":150217.0,"Funcionarias Municipales Mujeres":58.7,"Cobertura FONASA":87.1,"idx_recaudacion":41.7,"idx_seguridad":34.9,"idx_adopcion":54.7,"idx_cgi":47.8,"Tier":"T1"},{"CUT":13123,"Nombre":"Providencia","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":142000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":3.5,"Ingresos Propios Permanentes":92873933.0,"Ejecución Presupuestaria Municipal":89.7,"Mediana Ingreso Imponible Asalariados":2251151.0,"Tasa de Pobreza":1.3,"Numero de Empresas":47742.0,"Tasa de Delitos por 100.000 hab.":10675.4,"Puntaje Transparencia Activa (CPLT)":88.7,"Ingreso Municipal per Cápita":654042.0,"Funcionarias Municipales Mujeres":37.3,"Cobertura FONASA":55.7,"idx_recaudacion":23.3,"idx_seguridad":50.2,"idx_adopcion":61.3,"idx_cgi":43.6,"Tier":"T1"},{"CUT":13130,"Nombre":"San Miguel","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":107000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":15.4,"Ingresos Propios Permanentes":17342168.0,"Ejecución Presupuestaria Municipal":85.3,"Mediana Ingreso Imponible Asalariados":1174170.0,"Tasa de Pobreza":2.2,"Numero de Empresas":7541.0,"Tasa de Delitos por 100.000 hab.":8710.3,"Puntaje Transparencia Activa (CPLT)":79.9,"Ingreso Municipal per Cápita":162076.0,"Funcionarias Municipales Mujeres":45.8,"Cobertura FONASA":99.9,"idx_recaudacion":28.6,"idx_seguridad":47.3,"idx_adopcion":54.3,"idx_cgi":41.6,"Tier":"T1"},{"CUT":13120,"Nombre":"Ñuñoa","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":243000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":9.0,"Ingresos Propios Permanentes":43587440.0,"Ejecución Presupuestaria Municipal":83.6,"Mediana Ingreso Imponible Asalariados":1861440.0,"Tasa de Pobreza":1.5,"Numero de Empresas":16115.0,"Tasa de Delitos por 100.000 hab.":5778.2,"Puntaje Transparencia Activa (CPLT)":78.3,"Ingreso Municipal per Cápita":179372.0,"Funcionarias Municipales Mujeres":42.7,"Cobertura FONASA":45.0,"idx_recaudacion":19.1,"idx_seguridad":64.4,"idx_adopcion":50.8,"idx_cgi":39.5,"Tier":"T1"},{"CUT":13118,"Nombre":"Macul","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":130000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":22.7,"Ingresos Propios Permanentes":18252600.0,"Ejecución Presupuestaria Municipal":94.0,"Mediana Ingreso Imponible Asalariados":1029912.0,"Tasa de Pobreza":3.5,"Numero de Empresas":5636.0,"Tasa de Delitos por 100.000 hab.":5726.9,"Puntaje Transparencia Activa (CPLT)":67.0,"Ingreso Municipal per Cápita":140405.0,"Funcionarias Municipales Mujeres":43.4,"Cobertura FONASA":96.3,"idx_recaudacion":34.3,"idx_seguridad":43.6,"idx_adopcion":42.7,"idx_cgi":36.1,"Tier":"T1"},{"CUT":5109,"Nombre":"Vina del Mar","Región":"Valparaiso","Provincia":"Valparaiso","population_total":334000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":10.3,"Ingresos Propios Permanentes":97734155.0,"Ejecución Presupuestaria Municipal":95.0,"Mediana Ingreso Imponible Asalariados":822055.0,"Tasa de Pobreza":6.5,"Numero de Empresas":21174.0,"Tasa de Delitos por 100.000 hab.":6665.6,"Puntaje Transparencia Activa (CPLT)":65.2,"Ingreso Municipal per Cápita":292617.0,"Funcionarias Municipales Mujeres":47.2,"Cobertura FONASA":84.0,"idx_recaudacion":33.4,"idx_seguridad":37.5,"idx_adopcion":47.1,"idx_cgi":35.0,"Tier":"T1"},{"CUT":16202,"Nombre":"Cobquecura","Región":"Nuble","Provincia":"Itata","population_total":6000.0,"sinim_rural_pct":71.6,"Dependencia del FCM":85.4,"Ingresos Propios Permanentes":593823.0,"Ejecución Presupuestaria Municipal":83.9,"Mediana Ingreso Imponible Asalariados":606789.0,"Tasa de Pobreza":19.0,"Numero de Empresas":182.0,"Tasa de Delitos por 100.000 hab.":5116.7,"Puntaje Transparencia Activa (CPLT)":91.9,"Ingreso Municipal per Cápita":98971.0,"Funcionarias Municipales Mujeres":46.3,"Cobertura FONASA":96.0,"idx_recaudacion":89.4,"idx_seguridad":4.6,"idx_adopcion":62.3,"idx_cgi":84.1,"Tier":"T2"},{"CUT":9121,"Nombre":"Cholchol","Región":"La Araucania","Provincia":"Cautin","population_total":11000.0,"sinim_rural_pct":61.5,"Dependencia del FCM":88.1,"Ingresos Propios Permanentes":544662.0,"Ejecución Presupuestaria Municipal":87.4,"Mediana Ingreso Imponible Asalariados":612500.0,"Tasa de Pobreza":19.7,"Numero de Empresas":220.0,"Tasa de Delitos por 100.000 hab.":7254.5,"Puntaje Transparencia Activa (CPLT)":84.0,"Ingreso Municipal per Cápita":49515.0,"Funcionarias Municipales Mujeres":46.8,"Cobertura FONASA":100.0,"idx_recaudacion":91.5,"idx_seguridad":7.3,"idx_adopcion":56.2,"idx_cgi":83.1,"Tier":"T2"},{"CUT":7109,"Nombre":"San Clemente","Región":"Maule","Provincia":"Talca","population_total":42000.0,"sinim_rural_pct":45.3,"Dependencia del FCM":71.0,"Ingresos Propios Permanentes":3472037.0,"Ejecución Presupuestaria Municipal":73.4,"Mediana Ingreso Imponible Asalariados":688400.0,"Tasa de Pobreza":10.5,"Numero de Empresas":2514.0,"Tasa de Delitos por 100.000 hab.":6581.0,"Puntaje Transparencia Activa (CPLT)":98.6,"Ingreso Municipal per Cápita":82668.0,"Funcionarias Municipales Mujeres":63.1,"Cobertura FONASA":100.0,"idx_recaudacion":70.9,"idx_seguridad":8.7,"idx_adopcion":81.4,"idx_cgi":82.7,"Tier":"T2"},{"CUT":10306,"Nombre":"San Juan de la Costa","Región":"Los Lagos","Provincia":"Osorno","population_total":7521.0,"sinim_rural_pct":79.4,"Dependencia del FCM":91.7,"Ingresos Propios Permanentes":375973.0,"Ejecución Presupuestaria Municipal":81.9,"Mediana Ingreso Imponible Asalariados":635965.0,"Tasa de Pobreza":12.8,"Numero de Empresas":234.0,"Tasa de Delitos por 100.000 hab.":8443.0,"Puntaje Transparencia Activa (CPLT)":95.0,"Ingreso Municipal per Cápita":49990.0,"Funcionarias Municipales Mujeres":42.6,"Cobertura FONASA":100.0,"idx_recaudacion":83.8,"idx_seguridad":8.3,"idx_adopcion":60.6,"idx_cgi":79.2,"Tier":"T2"},{"CUT":9210,"Nombre":"Traiguen","Región":"La Araucania","Provincia":"Malleco","population_total":20000.0,"sinim_rural_pct":21.4,"Dependencia del FCM":80.7,"Ingresos Propios Permanentes":1320832.0,"Ejecución Presupuestaria Municipal":69.4,"Mediana Ingreso Imponible Asalariados":623319.5,"Tasa de Pobreza":14.2,"Numero de Empresas":1029.0,"Tasa de Delitos por 100.000 hab.":6785.0,"Puntaje Transparencia Activa (CPLT)":85.5,"Ingreso Municipal per Cápita":66042.0,"Funcionarias Municipales Mujeres":55.6,"Cobertura FONASA":69.1,"idx_recaudacion":80.7,"idx_seguridad":7.4,"idx_adopcion":65.2,"idx_cgi":79.1,"Tier":"T2"},{"CUT":8111,"Nombre":"San Pedro de la Paz","Región":"Biobio","Provincia":"Concepcion","population_total":135000.0,"sinim_rural_pct":9.4,"Dependencia del FCM":79.6,"Ingresos Propios Permanentes":3781460.0,"Ejecución Presupuestaria Municipal":62.2,"Mediana Ingreso Imponible Asalariados":770725.0,"Tasa de Pobreza":8.0,"Numero de Empresas":5614.0,"Tasa de Delitos por 100.000 hab.":2636.3,"Puntaje Transparencia Activa (CPLT)":89.4,"Ingreso Municipal per Cápita":28011.0,"Funcionarias Municipales Mujeres":61.1,"Cobertura FONASA":42.3,"idx_recaudacion":72.4,"idx_seguridad":11.8,"idx_adopcion":72.1,"idx_cgi":78.8,"Tier":"T2"},{"CUT":5101,"Nombre":"Valparaiso","Región":"Valparaiso","Provincia":"Valparaiso","population_total":296000.0,"sinim_rural_pct":0.4,"Dependencia del FCM":50.8,"Ingresos Propios Permanentes":31659119.0,"Ejecución Presupuestaria Municipal":96.2,"Mediana Ingreso Imponible Asalariados":761650.0,"Tasa de Pobreza":7.4,"Numero de Empresas":15067.0,"Tasa de Delitos por 100.000 hab.":7647.6,"Puntaje Transparencia Activa (CPLT)":97.1,"Ingreso Municipal per Cápita":106956.0,"Funcionarias Municipales Mujeres":46.5,"Cobertura FONASA":94.4,"idx_recaudacion":59.4,"idx_seguridad":30.0,"idx_adopcion":66.4,"idx_cgi":72.1,"Tier":"T2"},{"CUT":13501,"Nombre":"Talagante","Región":"Metropolitana de Santiago","Provincia":"Talagante","population_total":72000.0,"sinim_rural_pct":30.4,"Dependencia del FCM":68.0,"Ingresos Propios Permanentes":8284059.0,"Ejecución Presupuestaria Municipal":97.3,"Mediana Ingreso Imponible Asalariados":733264.0,"Tasa de Pobreza":7.6,"Numero de Empresas":3666.0,"Tasa de Delitos por 100.000 hab.":10683.3,"Puntaje Transparencia Activa (CPLT)":97.3,"Ingreso Municipal per Cápita":115056.0,"Funcionarias Municipales Mujeres":49.3,"Cobertura FONASA":100.0,"idx_recaudacion":65.0,"idx_seguridad":15.4,"idx_adopcion":69.0,"idx_cgi":71.1,"Tier":"T2"},{"CUT":9101,"Nombre":"Temuco","Región":"La Araucania","Provincia":"Cautin","population_total":282000.0,"sinim_rural_pct":7.4,"Dependencia del FCM":45.3,"Ingresos Propios Permanentes":38008981.0,"Ejecución Presupuestaria Municipal":59.6,"Mediana Ingreso Imponible Asalariados":844079.0,"Tasa de Pobreza":8.6,"Numero de Empresas":18639.0,"Tasa de Delitos por 100.000 hab.":7930.1,"Puntaje Transparencia Activa (CPLT)":96.3,"Ingreso Municipal per Cápita":134784.0,"Funcionarias Municipales Mujeres":40.1,"Cobertura FONASA":92.2,"idx_recaudacion":58.7,"idx_seguridad":28.9,"idx_adopcion":60.8,"idx_cgi":66.2,"Tier":"T2"},{"CUT":2103,"Nombre":"Sierra Gorda","Región":"Antofagasta","Provincia":"Antofagasta","population_total":3500.0,"sinim_rural_pct":100.0,"Dependencia del FCM":21.1,"Ingresos Propios Permanentes":7463592.0,"Ejecución Presupuestaria Municipal":71.7,"Mediana Ingreso Imponible Asalariados":800702.0,"Tasa de Pobreza":2.1,"Numero de Empresas":113.0,"Tasa de Delitos por 100.000 hab.":16942.9,"Puntaje Transparencia Activa (CPLT)":89.9,"Ingreso Municipal per Cápita":2132455.0,"Funcionarias Municipales Mujeres":50.6,"Cobertura FONASA":23.1,"idx_recaudacion":32.3,"idx_seguridad":17.2,"idx_adopcion":97.6,"idx_cgi":61.3,"Tier":"T3"},{"CUT":7101,"Nombre":"Talca","Región":"Maule","Provincia":"Talca","population_total":220000.0,"sinim_rural_pct":4.7,"Dependencia del FCM":46.3,"Ingresos Propios Permanentes":25738580.0,"Ejecución Presupuestaria Municipal":86.6,"Mediana Ingreso Imponible Asalariados":825000.0,"Tasa de Pobreza":5.7,"Numero de Empresas":14794.0,"Tasa de Delitos por 100.000 hab.":6656.8,"Puntaje Transparencia Activa (CPLT)":88.8,"Ingreso Municipal per Cápita":116994.0,"Funcionarias Municipales Mujeres":45.0,"Cobertura FONASA":100.0,"idx_recaudacion":54.9,"idx_seguridad":24.2,"idx_adopcion":59.3,"idx_cgi":58.4,"Tier":"T3"},{"CUT":2101,"Nombre":"Antofagasta","Región":"Antofagasta","Provincia":"Antofagasta","population_total":361000.0,"sinim_rural_pct":1.4,"Dependencia del FCM":19.0,"Ingresos Propios Permanentes":61537137.0,"Ejecución Presupuestaria Municipal":69.1,"Mediana Ingreso Imponible Asalariados":1074167.0,"Tasa de Pobreza":7.2,"Numero de Empresas":19800.0,"Tasa de Delitos por 100.000 hab.":7158.4,"Puntaje Transparencia Activa (CPLT)":94.6,"Ingreso Municipal per Cápita":170463.0,"Funcionarias Municipales Mujeres":54.2,"Cobertura FONASA":92.2,"idx_recaudacion":39.6,"idx_seguridad":31.9,"idx_adopcion":72.2,"idx_cgi":57.7,"Tier":"T3"},{"CUT":6101,"Nombre":"Rancagua","Región":"O'Higgins","Provincia":"Cachapoal","population_total":241000.0,"sinim_rural_pct":2.9,"Dependencia del FCM":45.5,"Ingresos Propios Permanentes":26549906.0,"Ejecución Presupuestaria Municipal":94.6,"Mediana Ingreso Imponible Asalariados":874167.0,"Tasa de Pobreza":6.3,"Numero de Empresas":12538.0,"Tasa de Delitos por 100.000 hab.":7002.5,"Puntaje Transparencia Activa (CPLT)":80.7,"Ingreso Municipal per Cápita":110166.0,"Funcionarias Municipales Mujeres":44.7,"Cobertura FONASA":96.5,"idx_recaudacion":53.5,"idx_seguridad":25.9,"idx_adopcion":53.1,"idx_cgi":53.2,"Tier":"T3"},{"CUT":13124,"Nombre":"Pudahuel","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":230000.0,"sinim_rural_pct":1.9,"Dependencia del FCM":29.2,"Ingresos Propios Permanentes":49497133.0,"Ejecución Presupuestaria Municipal":77.9,"Mediana Ingreso Imponible Asalariados":834734.0,"Tasa de Pobreza":4.4,"Numero de Empresas":8695.0,"Tasa de Delitos por 100.000 hab.":6620.9,"Puntaje Transparencia Activa (CPLT)":94.4,"Ingreso Municipal per Cápita":215205.0,"Funcionarias Municipales Mujeres":52.8,"Cobertura FONASA":90.3,"idx_recaudacion":38.7,"idx_seguridad":25.5,"idx_adopcion":71.7,"idx_cgi":52.4,"Tier":"T3"},{"CUT":13122,"Nombre":"Peñalolen","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":237000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":36.4,"Ingresos Propios Permanentes":33345260.0,"Ejecución Presupuestaria Municipal":86.9,"Mediana Ingreso Imponible Asalariados":861089.0,"Tasa de Pobreza":3.2,"Numero de Empresas":9055.0,"Tasa de Delitos por 100.000 hab.":4317.3,"Puntaje Transparencia Activa (CPLT)":85.2,"Ingreso Municipal per Cápita":140697.0,"Funcionarias Municipales Mujeres":46.9,"Cobertura FONASA":87.8,"idx_recaudacion":42.4,"idx_seguridad":33.0,"idx_adopcion":58.8,"idx_cgi":50.6,"Tier":"T3"},{"CUT":13401,"Nombre":"Melipilla","Región":"Metropolitana de Santiago","Provincia":"Melipilla","population_total":110000.0,"sinim_rural_pct":1.4,"Dependencia del FCM":39.2,"Ingresos Propios Permanentes":39761582.0,"Ejecución Presupuestaria Municipal":93.9,"Mediana Ingreso Imponible Asalariados":812780.0,"Tasa de Pobreza":6.0,"Numero de Empresas":7490.0,"Tasa de Delitos por 100.000 hab.":17238.2,"Puntaje Transparencia Activa (CPLT)":83.7,"Ingreso Municipal per Cápita":361469.0,"Funcionarias Municipales Mujeres":42.3,"Cobertura FONASA":100.0,"idx_recaudacion":46.4,"idx_seguridad":27.1,"idx_adopcion":57.3,"idx_cgi":50.0,"Tier":"T3"},{"CUT":13114,"Nombre":"Las Condes","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":294000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":2.4,"Ingresos Propios Permanentes":206376842.0,"Ejecución Presupuestaria Municipal":88.7,"Mediana Ingreso Imponible Asalariados":2445271.5,"Tasa de Pobreza":0.9,"Numero de Empresas":56615.0,"Tasa de Delitos por 100.000 hab.":3661.6,"Puntaje Transparencia Activa (CPLT)":59.1,"Ingreso Municipal per Cápita":701962.0,"Funcionarias Municipales Mujeres":36.4,"Cobertura FONASA":32.7,"idx_recaudacion":11.9,"idx_seguridad":32.1,"idx_adopcion":40.0,"idx_cgi":4.4,"Tier":"T3"},{"CUT":13132,"Nombre":"Vitacura","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":90000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":2.8,"Ingresos Propios Permanentes":83995366.0,"Ejecución Presupuestaria Municipal":83.6,"Mediana Ingreso Imponible Asalariados":2879460.0,"Tasa de Pobreza":0.9,"Numero de Empresas":15509.0,"Tasa de Delitos por 100.000 hab.":3535.6,"Puntaje Transparencia Activa (CPLT)":89.5,"Ingreso Municipal per Cápita":933282.0,"Funcionarias Municipales Mujeres":41.1,"Cobertura FONASA":23.1,"idx_recaudacion":0.0,"idx_seguridad":18.3,"idx_adopcion":69.7,"idx_cgi":7.3,"Tier":"T3"},{"CUT":1402,"Nombre":"Camina","Región":"Tarapaca","Provincia":"Tamarugal","population_total":1500.0,"sinim_rural_pct":100.0,"Dependencia del FCM":96.4,"Ingresos Propios Permanentes":90197.0,"Ejecución Presupuestaria Municipal":64.8,"Mediana Ingreso Imponible Asalariados":815834.0,"Tasa de Pobreza":24.0,"Numero de Empresas":76.0,"Tasa de Delitos por 100.000 hab.":6466.7,"Puntaje Transparencia Activa (CPLT)":74.2,"Ingreso Municipal per Cápita":60131.0,"Funcionarias Municipales Mujeres":46.3,"Cobertura FONASA":73.0,"idx_recaudacion":99.4,"idx_seguridad":5.7,"idx_adopcion":49.0,"idx_cgi":84.4,"Tier":"T4"},{"CUT":8207,"Nombre":"Tirúa","Región":"Biobio","Provincia":"Arauco","population_total":11078.0,"sinim_rural_pct":61.5,"Dependencia del FCM":91.4,"Ingresos Propios Permanentes":406148.0,"Ejecución Presupuestaria Municipal":42.4,"Mediana Ingreso Imponible Asalariados":588750.0,"Tasa de Pobreza":20.1,"Numero de Empresas":374.0,"Tasa de Delitos por 100.000 hab.":4287.8,"Puntaje Transparencia Activa (CPLT)":74.9,"Ingreso Municipal per Cápita":36663.0,"Funcionarias Municipales Mujeres":52.0,"Cobertura FONASA":100.0,"idx_recaudacion":94.0,"idx_seguridad":4.1,"idx_adopcion":54.0,"idx_cgi":81.9,"Tier":"T4"},{"CUT":9116,"Nombre":"Saavedra","Región":"La Araucania","Provincia":"Cautin","population_total":15000.0,"sinim_rural_pct":76.9,"Dependencia del FCM":91.9,"Ingresos Propios Permanentes":449704.0,"Ejecución Presupuestaria Municipal":80.7,"Mediana Ingreso Imponible Asalariados":580310.0,"Tasa de Pobreza":24.3,"Numero de Empresas":387.0,"Tasa de Delitos por 100.000 hab.":3566.7,"Puntaje Transparencia Activa (CPLT)":77.0,"Ingreso Municipal per Cápita":29980.0,"Funcionarias Municipales Mujeres":38.6,"Cobertura FONASA":84.5,"idx_recaudacion":100.0,"idx_seguridad":3.6,"idx_adopcion":43.9,"idx_cgi":79.7,"Tier":"T4"},{"CUT":13112,"Nombre":"La Pintana","Región":"Metropolitana de Santiago","Provincia":"Santiago","population_total":190000.0,"sinim_rural_pct":0.0,"Dependencia del FCM":83.1,"Ingresos Propios Permanentes":6128135.0,"Ejecución Presupuestaria Municipal":73.6,"Mediana Ingreso Imponible Asalariados":682388.0,"Tasa de Pobreza":9.3,"Numero de Empresas":4708.0,"Tasa de Delitos por 100.000 hab.":4867.4,"Puntaje Transparencia Activa (CPLT)":70.5,"Ingreso Municipal per Cápita":32253.0,"Funcionarias Municipales Mujeres":46.2,"Cobertura FONASA":84.6,"idx_recaudacion":76.1,"idx_seguridad":35.5,"idx_adopcion":45.7,"idx_cgi":76.0,"Tier":"T4"},{"CUT":9117,"Nombre":"Teodoro Schmidt","Región":"La Araucania","Provincia":"Cautin","population_total":16000.0,"sinim_rural_pct":64.8,"Dependencia del FCM":90.2,"Ingresos Propios Permanentes":531917.0,"Ejecución Presupuestaria Municipal":75.1,"Mediana Ingreso Imponible Asalariados":618750.0,"Tasa de Pobreza":19.9,"Numero de Empresas":708.0,"Tasa de Delitos por 100.000 hab.":5468.8,"Puntaje Transparencia Activa (CPLT)":67.6,"Ingreso Municipal per Cápita":33245.0,"Funcionarias Municipales Mujeres":49.3,"Cobertura FONASA":91.3,"idx_recaudacion":93.1,"idx_seguridad":5.7,"idx_adopcion":46.4,"idx_cgi":75.9,"Tier":"T4"},{"CUT":8201,"Nombre":"Los Angeles","Región":"Biobio","Provincia":"Biobio","population_total":202000.0,"sinim_rural_pct":7.1,"Dependencia del FCM":85.8,"Ingresos Propios Permanentes":1090812.0,"Ejecución Presupuestaria Municipal":76.2,"Mediana Ingreso Imponible Asalariados":628598.0,"Tasa de Pobreza":10.5,"Numero de Empresas":12824.0,"Tasa de Delitos por 100.000 hab.":1035.1,"Puntaje Transparencia Activa (CPLT)":73.0,"Ingreso Municipal per Cápita":5400.0,"Funcionarias Municipales Mujeres":45.9,"Cobertura FONASA":11.6,"idx_recaudacion":84.4,"idx_seguridad":15.1,"idx_adopcion":46.8,"idx_cgi":73.1,"Tier":"T4"}]`);
+
+let selTier='ALL', selRow=null;
+
+// populate region select
+const regs=[...new Set(DATA.map(d=>d['Región']))].sort();
+const sel=document.getElementById('regSel');
+regs.forEach(r=>{const o=document.createElement('option');o.value=r;o.textContent=r;sel.appendChild(o)});
+
+function fmt(n){return n==null?'—':(+n).toFixed(1)}
+function fmtN(n){if(n==null)return'—';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(0)+'k';return Math.round(n).toLocaleString()}
+
+function getFiltered(){
+  const q=document.getElementById('search').value.toLowerCase();
+  const reg=document.getElementById('regSel').value;
+  return DATA.filter(d=>{
+    if(selTier!=='ALL'&&d.Tier!==selTier)return false;
+    if(reg&&d['Región']!==reg)return false;
+    if(q&&!d.Nombre.toLowerCase().includes(q)&&!d['Región'].toLowerCase().includes(q))return false;
+    return true;
+  });
+}
+
+function getSorted(arr){
+  const k=document.getElementById('sortSel').value;
+  return [...arr].sort((a,b)=>(b[k]||0)-(a[k]||0));
+}
+
+// Charts
+let scatterChart, barCh, ruralCh;
+
+function buildScatter(data){
+  const ctx=document.getElementById('scatter').getContext('2d');
+  if(scatterChart)scatterChart.destroy();
+  const datasets=['T1','T2','T3','T4'].map(t=>({
+    label:TL[t],
+    data:data.filter(d=>d.Tier===t).map(d=>({x:d.idx_recaudacion,y:d.idx_seguridad,nombre:d.Nombre,cgi:d.idx_cgi,tier:t})),
+    backgroundColor:TC[t]+'99',borderColor:TC[t],borderWidth:1,pointRadius:4,pointHoverRadius:6
+  }));
+  scatterChart=new Chart(ctx,{
+    type:'scatter',data:{datasets},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:p=>`${p.raw.nombre}: CGI ${p.raw.cgi.toFixed(1)}`}}},
+      scales:{
+        x:{title:{display:true,text:'Índice Recaudación',color:'#6b7a99',font:{size:11}},min:0,max:105,ticks:{color:'#6b7a99'},grid:{color:'#1e2535'}},
+        y:{title:{display:true,text:'Índice Seguridad',color:'#6b7a99',font:{size:11}},min:0,max:105,ticks:{color:'#6b7a99'},grid:{color:'#1e2535'}}
+      }
+    }
+  });
+}
+
+function buildBar(data){
+  const ctx=document.getElementById('barChart').getContext('2d');
+  if(barCh)barCh.destroy();
+  const tiers=['T1','T2','T3','T4'];
+  const avgs=tiers.map(t=>{const s=data.filter(d=>d.Tier===t);return s.length?(s.reduce((a,b)=>a+b.idx_cgi,0)/s.length).toFixed(1):0});
+  barCh=new Chart(ctx,{
+    type:'bar',
+    data:{labels:tiers.map(t=>TL[t]),datasets:[{data:avgs,backgroundColor:tiers.map(t=>TC[t]+'cc'),borderColor:tiers.map(t=>TC[t]),borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6b7a99',font:{size:10}},grid:{color:'#1e2535'},min:0,max:100}}}
+  });
+}
+
+function buildRural(data){
+  const ctx=document.getElementById('ruralChart').getContext('2d');
+  if(ruralCh)ruralCh.destroy();
+  const tiers=['T1','T2','T3','T4'];
+  const avgs=tiers.map(t=>{const s=data.filter(d=>d.Tier===t);return s.length?(s.reduce((a,b)=>a+(b.sinim_rural_pct||0),0)/s.length).toFixed(1):0});
+  ruralCh=new Chart(ctx,{
+    type:'bar',
+    data:{labels:tiers.map(t=>TL[t]),datasets:[{data:avgs,backgroundColor:tiers.map(t=>TC[t]+'88'),borderColor:tiers.map(t=>TC[t]),borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#6b7a99',font:{size:10}},grid:{display:false}},y:{ticks:{color:'#6b7a99',font:{size:10},callback:v=>v+'%'},grid:{color:'#1e2535'},min:0,max:100}}}
+  });
+}
+
+function render(){
+  const filtered=getFiltered();
+  const sorted=getSorted(filtered);
+  document.getElementById('res-count').textContent=`${sorted.length} comunas`;
+  document.getElementById('tbl-count').textContent=`Mostrando ${Math.min(sorted.length,200)} de ${sorted.length} comunas`;
+
+  // KPIs
+  ['T1','T2','T3','T4'].forEach((t,i)=>{
+    const n=filtered.filter(d=>d.Tier===t).length;
+    document.getElementById('k'+(i+1)).textContent=n;
+  });
+
+  buildScatter(filtered);
+  buildBar(filtered);
+  buildRural(filtered);
+
+  const tbody=document.getElementById('tbl-body');
+  tbody.innerHTML=sorted.slice(0,200).map((d,i)=>{
+    const c=TC[d.Tier];
+    const bar=v=>`<div class="bar-cell"><div class="bar-bg"><div class="bar-fill" style="width:${Math.max(0,Math.min(100,v))}%;background:${c}"></div></div><span style="font-size:11px;color:#8a9ab8;min-width:30px">${fmt(v)}</span></div>`;
+    return `<tr onclick="selectRow(${d.CUT})" id="row-${d.CUT}">
+      <td style="color:#4a5570;font-size:11px">${i+1}</td>
+      <td style="font-weight:600;color:#c8cfe0">${d.Nombre}</td>
+      <td style="color:#6b7a99;font-size:12px">${d['Región']}</td>
+      <td><span class="tier-pill" style="background:${c}22;color:${c}">${TL[d.Tier]}</span></td>
+      <td>${bar(d.idx_cgi)}</td>
+      <td class="num">${fmt(d.idx_recaudacion)}</td>
+      <td class="num">${fmt(d.idx_seguridad)}</td>
+      <td class="num">${fmt(d.idx_adopcion)}</td>
+      <td class="num">${fmtN(d.population_total)}</td>
+      <td class="num">${fmt(d.sinim_rural_pct)}%</td>
+      <td class="num">${fmt(d['Dependencia del FCM'])}%</td>
+      <td class="num">${fmt(d['Tasa de Pobreza'])}%</td>
+    </tr>`;
+  }).join('');
+}
+
+function selectRow(cut){
+  if(selRow===cut){
+    selRow=null;
+    document.getElementById('detail-panel').classList.remove('open');
+    document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('selected'));
+    return;
+  }
+  selRow=cut;
+  document.querySelectorAll('tbody tr').forEach(r=>r.classList.remove('selected'));
+  const row=document.getElementById('row-'+cut);
+  if(row)row.classList.add('selected');
+  const d=DATA.find(x=>x.CUT===cut);
+  if(!d)return;
+  document.getElementById('detail-title').textContent=`${d.Nombre} · ${d['Región']} · ${TL[d.Tier]} · Score CGI ${d.idx_cgi.toFixed(1)}`;
+  const items=[
+    ['Población',fmtN(d.population_total),'hab'],
+    ['% Rural',fmt(d.sinim_rural_pct),'%'],
+    ['Dependencia FCM',fmt(d['Dependencia del FCM']),'%'],
+    ['Ingreso mediano',fmtN(d['Mediana Ingreso Imponible Asalariados']),'CLP'],
+    ['Tasa de pobreza',fmt(d['Tasa de Pobreza']),'%'],
+    ['Nº empresas',fmtN(d['Numero de Empresas']),''],
+    ['Delitos /100k',fmtN(d['Tasa de Delitos por 100.000 hab.']),''],
+    ['CPLT transparencia',fmt(d['Puntaje Transparencia Activa (CPLT)']),'%'],
+    ['Ingreso p/cápita',fmtN(d['Ingreso Municipal per Cápita']),'CLP'],
+    ['% mujeres func.',fmt(d['Funcionarias Municipales Mujeres']),'%'],
+    ['Cobertura FONASA',fmt(d['Cobertura FONASA']),'%'],
+    ['Ejecución presup.',fmt(d['Ejecución Presupuestaria Municipal']),'%'],
+  ];
+  document.getElementById('detail-grid').innerHTML=items.map(([l,v,u])=>`
+    <div class="detail-item"><div class="detail-item-label">${l}</div><div class="detail-item-val">${v}</div><div class="detail-item-unit">${u}</div></div>
+  `).join('');
+  document.getElementById('detail-panel').classList.add('open');
+  row.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function setTier(t,btn){
+  selTier=t;
+  document.querySelectorAll('.tier-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
