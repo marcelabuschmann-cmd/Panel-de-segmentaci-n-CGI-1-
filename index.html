@@ -458,8 +458,12 @@ function getFiltered(){
   return DATA.filter(d=>{
     if(selTier!=='ALL'&&getTierForRow(d)!==selTier)return false;
     if(reg&&d['Región']!==reg)return false;
-    const idcF=document.getElementById('idcSel')?document.getElementById('idcSel').value:'';
-    if(idcF){if(idcF==='nd'){if(d.idc!=null)return false;}else{if(d.idc_tramo!==idcF)return false;}}
+    const idcSelEl=document.getElementById('idcSel');
+    if(idcSelEl&&idcSelEl.value){
+      const idcF=idcSelEl.value;
+      if(idcF==='nd'){if(d.idc!=null)return false;}
+      else{if((d.idc_tramo||'')!==idcF)return false;}
+    }
     if(q&&!d.Nombre.toLowerCase().includes(q)&&!d['Región'].toLowerCase().includes(q))return false;
     return true;
   });
@@ -599,8 +603,6 @@ function setTier(t,btn){
   render();
 }
 
-render();
-
 let useIDC = false;
 
 function toggleIDC(){
@@ -625,6 +627,7 @@ function isChanged(d){
   return useIDC && d.tier_changed;
 }
 
+render();
 </script>
 </body>
 </html>
